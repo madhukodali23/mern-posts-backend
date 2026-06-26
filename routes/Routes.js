@@ -2,16 +2,93 @@ const express = require("express");
 const router = express.Router();
 
 const Post = require("../models/Post");
+const cloudinary =
+  require("../config/cloudinary");
+
+const streamifier =
+  require("streamifier");
+const multer = require("multer");
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+});
 
 // Create Post
-router.post("/posts", async (req, res) => {
-  try {
-    const post = await Post.create(req.body);
-    res.status(201).json(post);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+router.post(
+  "/posts",
+  upload.single("image"),
+  async (req, res) => {
+    try {
+      let imageUrl = "";
+
+      if (req.file) {
+        imageUrl =
+          await new Promise(
+            (
+              resolve,
+              reject
+            ) => {
+              const stream =
+                cloudinary.uploader.upload_stream(
+                  {
+                    folder:
+                      "posts",
+                  },
+                  (
+                    error,
+                    result
+                  ) => {
+                    if (
+                      error
+                    ) {
+                      reject(
+                        error
+                      );
+                    } else {
+                      resolve(
+                        result.secure_url
+                      );
+                    }
+                  }
+                );
+
+              streamifier
+                .createReadStream(
+                  req.file
+                    .buffer
+                )
+                .pipe(
+                  stream
+                );
+            }
+          );
+      }
+
+      const post =
+        await Post.create({
+          title:
+            req.body.title,
+          content:
+            req.body.content,
+          image:
+            imageUrl,
+          authorId:
+            req.body
+              .authorId,
+        });
+
+      res.status(201).json(
+        post
+      );
+    } catch (error) {
+       console.log(error);
+      res.status(500).json({
+        message:
+          error.message,
+      });
+    }
   }
-});
+);
 
 // Get All Posts
 router.get("/posts", async (req, res) => {
